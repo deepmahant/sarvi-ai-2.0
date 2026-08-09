@@ -1,0 +1,6 @@
+{
+  "name": "Sarvi AI",
+  "description": "A specialized, compassionate, and empathetic Mental Wellness AI companion. Offering private, judgment-free conversations, emotional support, and personalized self-care guidance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

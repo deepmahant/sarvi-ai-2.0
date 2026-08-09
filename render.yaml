@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: sarvi-ai
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        value: https://othgyqwvfaxttqzjtmdb.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        value: sb_publishable_rGRymMtdj9Rr3REPgfNNrg_zoOBEEGV
+      - key: VITE_SUPABASE_REDIRECT_URL
+        sync: false

@@ -35,8 +35,14 @@ function getInitialViewState(): { view: ViewState; user: AppUser | null } {
     return { view: 'landing', user: null };
   }
 
-  const savedUser = localStorage.getItem('sarvi_current_user');
-  const user = savedUser ? JSON.parse(savedUser) : null;
+  let user: AppUser | null = null;
+  try {
+    const savedUser = localStorage.getItem('sarvi_current_user');
+    user = savedUser ? JSON.parse(savedUser) : null;
+  } catch {
+    user = null;
+  }
+
   const path = window.location.pathname;
 
   if (path === '/admin') {
@@ -107,7 +113,7 @@ export default function App() {
 
     const autoAdvance = window.setTimeout(() => {
       handleSubmitIntro();
-    }, 4500);
+    }, 2500);
 
     return () => window.clearTimeout(autoAdvance);
   }, [showIntro, isIntroReady]);
@@ -121,43 +127,72 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const syncSupabaseSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
-        const appUser = getAppUserFromSupabase(data.session.user);
-        setUserState({
-          view: appUser.role === 'admin' ? 'admin' : 'dashboard',
-          user: appUser,
-        });
-        localStorage.setItem('sarvi_current_user', JSON.stringify(appUser));
+    let isMounted = true;
 
-        const provider = data.session.user.app_metadata?.provider || 'facebook';
-        const avatarUrl = data.session.user.user_metadata?.avatar_url || data.session.user.user_metadata?.picture;
-        void trackUserSessionEvent({
-          userEmail: appUser.email,
-          userName: appUser.name,
-          eventType: 'login',
-          authProvider: provider,
-          avatarUrl,
-        });
-      } else {
-        const savedUser = localStorage.getItem('sarvi_current_user');
-        if (savedUser) {
-          const user = JSON.parse(savedUser) as AppUser;
-          setUserState({ view: 'dashboard', user });
+    // Safety timeout: Never lock auth initialization longer than 2.5 seconds on slow mobile networks
+    const initTimeout = window.setTimeout(() => {
+      if (isMounted) {
+        setIsAuthInitializing(false);
+      }
+    }, 2500);
+
+    const syncSupabaseSession = async () => {
+      try {
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 2000)
+        );
+
+        const res = await Promise.race([sessionPromise, timeoutPromise]);
+        const sessionUser = res?.data?.session?.user;
+
+        if (sessionUser && isMounted) {
+          const appUser = getAppUserFromSupabase(sessionUser);
+          setUserState({
+            view: appUser.role === 'admin' ? 'admin' : 'dashboard',
+            user: appUser,
+          });
+          try {
+            localStorage.setItem('sarvi_current_user', JSON.stringify(appUser));
+          } catch {}
+
+          const provider = sessionUser.app_metadata?.provider || 'facebook';
+          const avatarUrl = sessionUser.user_metadata?.avatar_url || sessionUser.user_metadata?.picture;
+          void trackUserSessionEvent({
+            userEmail: appUser.email,
+            userName: appUser.name,
+            eventType: 'login',
+            authProvider: provider,
+            avatarUrl,
+          });
+        } else if (isMounted) {
+          try {
+            const savedUser = localStorage.getItem('sarvi_current_user');
+            if (savedUser) {
+              const user = JSON.parse(savedUser) as AppUser;
+              setUserState({ view: 'dashboard', user });
+            }
+          } catch {}
+        }
+      } catch {
+        // Fallback to local storage on mobile network offline or timeout
+      } finally {
+        if (isMounted) {
+          setIsAuthInitializing(false);
         }
       }
-      setIsAuthInitializing(false);
     };
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
+      if (session?.user && isMounted) {
         const appUser = getAppUserFromSupabase(session.user);
         setUserState({
           view: appUser.role === 'admin' ? 'admin' : 'dashboard',
           user: appUser,
         });
-        localStorage.setItem('sarvi_current_user', JSON.stringify(appUser));
+        try {
+          localStorage.setItem('sarvi_current_user', JSON.stringify(appUser));
+        } catch {}
 
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           const provider = session.user.app_metadata?.provider || 'facebook';
@@ -170,8 +205,10 @@ export default function App() {
             avatarUrl,
           });
         }
-      } else {
-        localStorage.removeItem('sarvi_current_user');
+      } else if (isMounted && event === 'SIGNED_OUT') {
+        try {
+          localStorage.removeItem('sarvi_current_user');
+        } catch {}
         setUserState({ view: 'landing', user: null });
       }
     });
@@ -179,6 +216,8 @@ export default function App() {
     syncSupabaseSession();
 
     return () => {
+      isMounted = false;
+      window.clearTimeout(initTimeout);
       authListener?.subscription?.unsubscribe();
     };
   }, []);
@@ -252,7 +291,9 @@ export default function App() {
       className="min-h-screen bg-[#050505] selection:bg-[#00ffff] selection:text-black font-sans text-white relative"
     >
       <div
-        className={`fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-[#030408] transition-opacity duration-700 ${showIntro ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={handleSubmitIntro}
+        onTouchStart={handleSubmitIntro}
+        className={`fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-[#030408] transition-opacity duration-700 cursor-pointer ${showIntro ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,255,0.16),transparent_60%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,0.04)_50%,transparent_100%)] intro-shimmer" />

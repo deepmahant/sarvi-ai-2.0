@@ -295,12 +295,16 @@ export async function recordRevenueTransaction(transaction: Omit<RevenueTransact
 }
 
 export function getSupabaseRedirectUrl(path = '/chat') {
+  if (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
+    return `${window.location.origin}${path}`;
+  }
+
   const configuredRedirect = import.meta.env.VITE_SUPABASE_REDIRECT_URL?.trim();
-  if (configuredRedirect) {
+  if (configuredRedirect && (configuredRedirect.startsWith('http://') || configuredRedirect.startsWith('https://'))) {
     return configuredRedirect;
   }
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location.origin) {
     return `${window.location.origin}${path}`;
   }
 

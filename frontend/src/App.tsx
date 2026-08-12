@@ -361,7 +361,7 @@ export default function App() {
           <LandingPage onOpenAuth={handleOpenAuth} onOpenAdmin={handleOpenAdmin} />
         )}
 
-        {view === 'auth' && !isAuthInitializing && (
+        {(view === 'auth' || (view === 'admin' && !currentUser) || (view === 'dashboard' && !currentUser)) && !isAuthInitializing && (
           <AuthPage 
             onSuccess={handleAuthSuccess} 
             onBackToHome={handleBackToHome} 

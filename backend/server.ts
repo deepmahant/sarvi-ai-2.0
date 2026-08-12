@@ -92,6 +92,16 @@ User's message: "${message}"`;
     }
   });
 
+  // Server & API Health Check Endpoint for Render Monitoring
+  app.get(['/health', '/api/health'], (_req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'SARVI AI 2.0',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // Handle client-side routing and Vite dev server middlewares
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -101,13 +111,28 @@ User's message: "${message}"`;
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(frontendRoot, 'dist');
+    const candidateDistPaths = [
+      path.join(frontendRoot, 'dist'),
+      path.resolve(process.cwd(), 'frontend', 'dist'),
+      path.resolve(process.cwd(), 'dist'),
+      path.resolve(__dirname, '../frontend/dist'),
+      path.resolve(__dirname, '../../frontend/dist'),
+    ];
+
+    const distPath = candidateDistPaths.find((p) => fs.existsSync(p)) ?? path.join(frontendRoot, 'dist');
     app.use(express.static(distPath));
+
+    // SPA wildcard fallback for all routes (/admin, /chat, /login, /auth)
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api/')) {
         return next();
       }
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Application bundle build in progress or dist directory not found.');
+      }
     });
   }
 

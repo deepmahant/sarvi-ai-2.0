@@ -23,6 +23,14 @@ async function startServer() {
   const PORT = Number(process.env.PORT ?? 3000);
   const HOST = process.env.HOST ?? '0.0.0.0';
 
+  // Enable CORS & Security Headers
+  app.use((_req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+  });
+
   // Body parser
   app.use(express.json());
 
@@ -120,7 +128,21 @@ User's message: "${message}"`;
     ];
 
     const distPath = candidateDistPaths.find((p) => fs.existsSync(p)) ?? path.join(frontendRoot, 'dist');
-    app.use(express.static(distPath));
+
+    // Fast caching headers for JS/CSS assets
+    app.use(
+      express.static(distPath, {
+        maxAge: '7d',
+        etag: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+          }
+        },
+      })
+    );
 
     // SPA wildcard fallback for all routes (/admin, /chat, /login, /auth)
     app.get('*', (req, res, next) => {
@@ -136,9 +158,22 @@ User's message: "${message}"`;
     });
   }
 
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`Server running on ${HOST}:${PORT} (Environment: ${process.env.NODE_ENV || 'development'})`);
   });
+
+  // Keep-alive self ping interval to prevent Render free-tier instance cold sleep
+  if (process.env.NODE_ENV === 'production') {
+    const selfPingInterval = setInterval(() => {
+      const pingUrl = `http://127.0.0.1:${PORT}/health`;
+      fetch(pingUrl).catch(() => {});
+    }, 4 * 60 * 1000); // Ping every 4 minutes
+
+    process.on('SIGTERM', () => {
+      clearInterval(selfPingInterval);
+      server.close();
+    });
+  }
 }
 
 startServer();

@@ -59,6 +59,23 @@ export async function trackUserSessionEvent({
     fullPayload.avatar_url = avatarUrl;
   }
 
+  // Save local fallback session log for instant real-time UI updates
+  try {
+    const localSessionsStr = localStorage.getItem('sarvi_local_user_sessions');
+    const localSessions: UserSessionRecord[] = localSessionsStr ? JSON.parse(localSessionsStr) : [];
+    const newRecord: UserSessionRecord = {
+      id: `SES-${Math.floor(10000 + Math.random() * 90000)}`,
+      user_email: normalizedEmail,
+      user_name: userName?.trim() || null,
+      event_type: eventType,
+      event_time: timestamp,
+      auth_provider: authProvider || 'email',
+      avatar_url: avatarUrl || null,
+    };
+    const updated = [newRecord, ...localSessions].slice(0, 50);
+    localStorage.setItem('sarvi_local_user_sessions', JSON.stringify(updated));
+  } catch {}
+
   try {
     // Primary attempt: Save to user_sessions table in Supabase DB
     const { error } = await supabase.from('user_sessions').insert(fullPayload);
@@ -154,7 +171,8 @@ export async function signInWithFacebook() {
   return data;
 }
 
-export async function fetchRecentUserSessions(limit = 10): Promise<UserSessionRecord[]> {
+export async function fetchRecentUserSessions(limit = 30): Promise<UserSessionRecord[]> {
+  let dbSessions: UserSessionRecord[] = [];
   try {
     const { data, error } = await supabase
       .from('user_sessions')
@@ -162,16 +180,35 @@ export async function fetchRecentUserSessions(limit = 10): Promise<UserSessionRe
       .order('event_time', { ascending: false })
       .limit(limit);
 
-    if (error) {
-      console.warn('Unable to fetch user session activity:', error.message);
-      return [];
+    if (!error && data) {
+      dbSessions = data as UserSessionRecord[];
     }
-
-    return (data || []) as UserSessionRecord[];
   } catch (error) {
     console.warn('Unable to fetch user session activity:', error);
-    return [];
   }
+
+  let localSessions: UserSessionRecord[] = [];
+  try {
+    const localSessionsStr = typeof window !== 'undefined' ? localStorage.getItem('sarvi_local_user_sessions') : null;
+    if (localSessionsStr) {
+      localSessions = JSON.parse(localSessionsStr);
+    }
+  } catch {}
+
+  // Merge DB and local sessions, deduplicating by email & timestamp
+  const mergedMap = new Map<string, UserSessionRecord>();
+  [...localSessions, ...dbSessions].forEach((s) => {
+    const key = `${s.user_email}-${s.event_type}-${s.event_time.slice(0, 16)}`;
+    if (!mergedMap.has(key)) {
+      mergedMap.set(key, s);
+    }
+  });
+
+  const mergedList = Array.from(mergedMap.values()).sort(
+    (a, b) => new Date(b.event_time).getTime() - new Date(a.event_time).getTime()
+  );
+
+  return mergedList.slice(0, limit);
 }
 
 export interface WebsiteIssue {

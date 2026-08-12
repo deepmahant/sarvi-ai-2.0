@@ -80,6 +80,19 @@ export default function AdminPage({ user, onLogout }: AdminPageProps) {
 
   useEffect(() => {
     loadAllData();
+
+    // Fast 3-second auto-sync interval for live real-time user arrivals
+    const syncTimer = setInterval(() => {
+      fetchRecentUserSessions(30).then((latestSessions) => {
+        if (latestSessions) {
+          setSessions(latestSessions);
+        }
+      }).catch(() => {});
+    }, 3000);
+
+    return () => {
+      clearInterval(syncTimer);
+    };
   }, []);
 
   const handleRefresh = () => {

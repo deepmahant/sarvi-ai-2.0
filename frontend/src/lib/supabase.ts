@@ -174,6 +174,89 @@ export async function fetchRecentUserSessions(limit = 10): Promise<UserSessionRe
   }
 }
 
+export interface WebsiteIssue {
+  id: string;
+  title: string;
+  category: 'API Error' | 'UI Bug' | 'Database' | 'Auth Failure' | 'Performance';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'investigating' | 'resolved';
+  timestamp: string;
+  details: string;
+  location: string;
+}
+
+export interface RevenueTransaction {
+  id: string;
+  userEmail: string;
+  userName: string;
+  plan: 'Pro Tier' | 'VIP Tier' | 'Credits Pack';
+  amountINR: number;
+  date: string;
+  status: 'completed' | 'pending' | 'failed';
+  paymentMethod: 'UPI' | 'Card' | 'NetBanking';
+}
+
+export interface SystemHealthMetrics {
+  serverStatus: 'Optimal' | 'Degraded' | 'Down';
+  apiLatencyMs: number;
+  dbStatus: 'Connected' | 'Disconnected';
+  activeSessionsCount: number;
+  openIssuesCount: number;
+  totalRevenueINR: number;
+  totalUsersCount: number;
+  todayNewUsers: number;
+}
+
+export async function fetchWebsiteIssues(): Promise<WebsiteIssue[]> {
+  try {
+    const { data, error } = await supabase
+      .from('website_issues')
+      .select('*')
+      .order('timestamp', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data as WebsiteIssue[];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchRevenueTransactions(): Promise<RevenueTransaction[]> {
+  try {
+    const { data, error } = await supabase
+      .from('revenue_transactions')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data as RevenueTransaction[];
+  } catch {
+    return [];
+  }
+}
+
+export async function recordRevenueTransaction(transaction: Omit<RevenueTransaction, 'id' | 'date'>) {
+  try {
+    const payload = {
+      ...transaction,
+      id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
+      date: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('revenue_transactions').insert(payload);
+    if (error) {
+      console.warn('Unable to record transaction in database:', error.message);
+    }
+  } catch (err) {
+    console.warn('Transaction record error:', err);
+  }
+}
+
 export function getSupabaseRedirectUrl(path = '/chat') {
   const configuredRedirect = import.meta.env.VITE_SUPABASE_REDIRECT_URL?.trim();
   if (configuredRedirect) {
@@ -186,4 +269,5 @@ export function getSupabaseRedirectUrl(path = '/chat') {
 
   return `http://127.0.0.1:3000${path}`;
 }
+
 

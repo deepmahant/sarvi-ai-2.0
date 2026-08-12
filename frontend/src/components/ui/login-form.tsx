@@ -268,28 +268,39 @@ export function LoginForm({ onSuccess, className = "" }: LoginFormProps) {
       return;
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const isAdminLogin = normalizedEmail === 'admin@sarvi.ai';
+    const normalizedInput = email.toLowerCase().trim();
+    const isAdminIdentifier =
+      normalizedInput === 'admin@sarvi.ai' ||
+      normalizedInput === 'sarvi-admin-01' ||
+      normalizedInput === 'admin';
     const adminPassword = 'Admin@123';
 
-    if (isAdminLogin && password !== adminPassword) {
-      setError('Invalid admin credentials.');
+    if (isAdminRoute && !isAdminIdentifier) {
+      setError('Access restricted: Only authorized Admin Client ID / Email can sign in here.');
       return;
+    }
+
+    if (isAdminIdentifier) {
+      if (password !== adminPassword) {
+        setError('Invalid admin credentials. Please check your Admin ID and password.');
+        return;
+      }
     }
 
     setIsLoading(true);
 
     try {
-      if (isAdminLogin && password === adminPassword) {
+      if (isAdminIdentifier && password === adminPassword) {
+        const adminEmail = 'admin@sarvi.ai';
         await trackUserSessionEvent({
-          userEmail: normalizedEmail,
-          userName: 'Admin',
+          userEmail: adminEmail,
+          userName: 'Master Admin',
           eventType: 'login',
         });
 
         const user = {
-          name: 'Admin',
-          email: normalizedEmail,
+          name: 'Master Admin',
+          email: adminEmail,
           role: 'admin' as const,
         };
         if (onSuccess) onSuccess(user);
@@ -460,10 +471,10 @@ export function LoginForm({ onSuccess, className = "" }: LoginFormProps) {
           </div>
         )}
 
-        {/* Email Input with Animated Label */}
+        {/* Admin User ID / Email Input */}
         <div className="relative z-0">
           <input
-            type="email"
+            type={isAdminRoute ? "text" : "email"}
             id="floating_email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -476,7 +487,7 @@ export function LoginForm({ onSuccess, className = "" }: LoginFormProps) {
             className="absolute text-sm text-gray-300 duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-focus:text-[#00ffff] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6"
           >
             <User className="inline-block mr-2 -mt-1" size={16} />
-            Email Address
+            {isAdminRoute ? "Admin User ID / Email" : "Email Address"}
           </label>
         </div>
 
@@ -531,84 +542,99 @@ export function LoginForm({ onSuccess, className = "" }: LoginFormProps) {
           className="group w-full flex items-center justify-center py-3 px-4 bg-gradient-to-r from-[#00ffff] to-[#0077ff] hover:from-[#00e6e6] hover:to-[#0066ee] rounded-lg text-black font-bold text-sm tracking-wide focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[#00ffff] transition-all duration-300 cursor-pointer disabled:opacity-50 shadow-[0_0_20px_rgba(0,255,255,0.3)]"
         >
           {isLoading ? (
-            <span>{isForgotPassword ? "Sending..." : "Connecting..."}</span>
+            <span>{isForgotPassword ? "Sending..." : "Verifying Admin..."}</span>
           ) : (
             <>
-              <span>{isForgotPassword ? "Send Reset Link" : isSignUp ? "Sign Up" : "Sign In"}</span>
+              <span>
+                {isForgotPassword
+                  ? "Send Reset Link"
+                  : isSignUp
+                  ? "Sign Up"
+                  : isAdminRoute
+                  ? "Admin Sign In"
+                  : "Sign In"}
+              </span>
               <ArrowRight className="ml-2 h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
             </>
           )}
         </button>
 
-        {/* Divider */}
-        <div className="relative flex py-1 items-center">
-          <div className="flex-grow border-t border-gray-400/30"></div>
-          <span className="flex-shrink mx-4 text-gray-400 text-[10px] tracking-wider uppercase">OR CONTINUE WITH</span>
-          <div className="flex-grow border-t border-gray-400/30"></div>
-        </div>
-
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => handleSocialSignIn('google')}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center py-2.5 px-4 bg-white/90 hover:bg-white rounded-lg text-gray-900 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[#00ffff] transition-all duration-300 cursor-pointer"
-          >
-            <svg className="w-4 h-4 mr-2" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039L38.802 8.841C34.553 4.806 29.613 2.5 24 2.5C11.983 2.5 2.5 11.983 2.5 24s9.483 21.5 21.5 21.5S45.5 36.017 45.5 24c0-1.538-.135-3.022-.389-4.417z"></path>
-              <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12.5 24 12.5c3.059 0 5.842 1.154 7.961 3.039l5.839-5.841C34.553 4.806 29.613 2.5 24 2.5C16.318 2.5 9.642 6.723 6.306 14.691z"></path>
-              <path fill="#4CAF50" d="M24 45.5c5.613 0 10.553-2.306 14.802-6.341l-5.839-5.841C30.842 35.846 27.059 38 24 38c-5.039 0-9.345-2.608-11.124-6.481l-6.571 4.819C9.642 41.277 16.318 45.5 24 45.5z"></path>
-              <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l5.839 5.841C44.196 35.123 45.5 29.837 45.5 24c0-1.538-.135-3.022-.389-4.417z"></path>
-            </svg>
-            Continue with Google
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSocialSignIn('facebook')}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center py-2.5 px-4 bg-[#1877F2] hover:bg-[#166FE5] rounded-lg text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[#00ffff] transition-all duration-300 cursor-pointer"
-          >
-            <Facebook className="w-4 h-4 mr-2" />
-            Continue with Facebook
-          </button>
-        </div>
-      </form>
-
-      <p className="text-center text-xs text-gray-300">
-        {isForgotPassword ? (
+        {/* Social Logins - Hidden on Admin Login page */}
+        {!isAdminRoute && (
           <>
-            Remembered your password?{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setIsForgotPassword(false);
-                setError("");
-                setSuccessMessage("");
-              }}
-              className="font-semibold text-[#00ffff] hover:underline transition cursor-pointer ml-1"
-            >
-              Back to Sign In
-            </button>
-          </>
-        ) : (
-          <>
-            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setIsForgotPassword(false);
-                setError("");
-                setSuccessMessage("");
-              }}
-              className="font-semibold text-[#00ffff] hover:underline transition cursor-pointer ml-1"
-            >
-              {isSignUp ? "Sign In" : "Sign Up"}
-            </button>
+            {/* Divider */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-gray-400/30"></div>
+              <span className="flex-shrink mx-4 text-gray-400 text-[10px] tracking-wider uppercase">OR CONTINUE WITH</span>
+              <div className="flex-grow border-t border-gray-400/30"></div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => handleSocialSignIn('google')}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center py-2.5 px-4 bg-white/90 hover:bg-white rounded-lg text-gray-900 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[#00ffff] transition-all duration-300 cursor-pointer"
+              >
+                <svg className="w-4 h-4 mr-2" viewBox="0 0 48 48">
+                  <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039L38.802 8.841C34.553 4.806 29.613 2.5 24 2.5C11.983 2.5 2.5 11.983 2.5 24s9.483 21.5 21.5 21.5S45.5 36.017 45.5 24c0-1.538-.135-3.022-.389-4.417z"></path>
+                  <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12.5 24 12.5c3.059 0 5.842 1.154 7.961 3.039l5.839-5.841C34.553 4.806 29.613 2.5 24 2.5C16.318 2.5 9.642 6.723 6.306 14.691z"></path>
+                  <path fill="#4CAF50" d="M24 45.5c5.613 0 10.553-2.306 14.802-6.341l-5.839-5.841C30.842 35.846 27.059 38 24 38c-5.039 0-9.345-2.608-11.124-6.481l-6.571 4.819C9.642 41.277 16.318 45.5 24 45.5z"></path>
+                  <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l5.839 5.841C44.196 35.123 45.5 29.837 45.5 24c0-1.538-.135-3.022-.389-4.417z"></path>
+                </svg>
+                Continue with Google
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSocialSignIn('facebook')}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center py-2.5 px-4 bg-[#1877F2] hover:bg-[#166FE5] rounded-lg text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-[#00ffff] transition-all duration-300 cursor-pointer"
+              >
+                <Facebook className="w-4 h-4 mr-2" />
+                Continue with Facebook
+              </button>
+            </div>
           </>
         )}
-      </p>
+      </form>
+
+      {!isAdminRoute && (
+        <p className="text-center text-xs text-gray-300">
+          {isForgotPassword ? (
+            <>
+              Remembered your password?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setError("");
+                  setSuccessMessage("");
+                }}
+                className="font-semibold text-[#00ffff] hover:underline transition cursor-pointer ml-1"
+              >
+                Back to Sign In
+              </button>
+            </>
+          ) : (
+            <>
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setIsForgotPassword(false);
+                  setError("");
+                  setSuccessMessage("");
+                }}
+                className="font-semibold text-[#00ffff] hover:underline transition cursor-pointer ml-1"
+              >
+                {isSignUp ? "Sign In" : "Sign Up"}
+              </button>
+            </>
+          )}
+        </p>
+      )}
     </div>
   );
 }

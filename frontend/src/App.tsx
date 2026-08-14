@@ -129,18 +129,18 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    // Safety timeout: Never lock auth initialization longer than 2.5 seconds on slow mobile networks
+    // Ultra-fast safety timeout: Never lock auth initialization longer than 500ms on slow mobile networks
     const initTimeout = window.setTimeout(() => {
       if (isMounted) {
         setIsAuthInitializing(false);
       }
-    }, 2500);
+    }, 500);
 
     const syncSupabaseSession = async () => {
       try {
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-          setTimeout(() => resolve({ data: { session: null } }), 2000)
+          setTimeout(() => resolve({ data: { session: null } }), 600)
         );
 
         const res = await Promise.race([sessionPromise, timeoutPromise]);
@@ -170,7 +170,7 @@ export default function App() {
             const savedUser = localStorage.getItem('sarvi_current_user');
             if (savedUser) {
               const user = JSON.parse(savedUser) as AppUser;
-              setUserState({ view: 'dashboard', user });
+              setUserState((prev) => (prev.user ? prev : { view: 'dashboard', user }));
             }
           } catch {}
         }

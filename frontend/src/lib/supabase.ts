@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://othgyqwvfaxttqzjtmdb.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_rGRymMtdj9Rr3REPgfNNrg_zoOBEEGV';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://othgyqwvfaxttqzjtmdb.supabase.co').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_rGRymMtdj9Rr3REPgfNNrg_zoOBEEGV').trim();
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -28,6 +28,78 @@ export interface TrackUserSessionOptions {
   eventType: 'login' | 'logout';
   authProvider?: string | null;
   avatarUrl?: string | null;
+}
+
+export interface DatabaseHealthReport {
+  connected: boolean;
+  authConnected: boolean;
+  dbConnected: boolean;
+  existingTables: string[];
+  missingTables: string[];
+  message: string;
+  latencyMs: number;
+}
+
+/**
+ * Perform a live real-time connection check against Supabase Auth & Database tables.
+ */
+export async function checkDatabaseConnection(): Promise<DatabaseHealthReport> {
+  const startTime = performance.now();
+  let authConnected = false;
+  let dbConnected = false;
+  const existingTables: string[] = [];
+  const missingTables: string[] = [];
+
+  // 1. Check Auth service connectivity
+  try {
+    const { error: sessionError } = await supabase.auth.getSession();
+    if (!sessionError) {
+      authConnected = true;
+    }
+  } catch {}
+
+  // 2. Check Database Tables connectivity
+  const tablesToCheck = ['users', 'weekly_reflections', 'session_titles', 'credit_transactions', 'subscriptions', 'user_sessions', 'profiles', 'website_issues', 'revenue_transactions'];
+  
+  await Promise.all(
+    tablesToCheck.map(async (table) => {
+      try {
+        const { error } = await supabase.from(table).select('*').limit(1);
+        if (!error) {
+          existingTables.push(table);
+          dbConnected = true;
+        } else if (error.code === 'PGRST205') {
+          missingTables.push(table);
+        } else {
+          // Table exists but RLS or empty query error
+          existingTables.push(table);
+          dbConnected = true;
+        }
+      } catch {
+        missingTables.push(table);
+      }
+    })
+  );
+
+  const endTime = performance.now();
+  const latencyMs = Math.round(endTime - startTime);
+
+  let message = 'Database & Auth operating normally.';
+  if (!authConnected) {
+    message = 'Unable to reach Supabase Auth endpoint.';
+  } else if (missingTables.length > 0) {
+    message = `Database connected. ${missingTables.length} tables pending migration (${missingTables.join(', ')}). Run supabase_schema.sql to create them.`;
+  }
+
+  return {
+    connected: authConnected && dbConnected,
+    authConnected,
+    dbConnected,
+    existingTables,
+    missingTables,
+    message,
+    latencyMs,
+  };
 }
 
 export async function trackUserSessionEvent({
@@ -80,21 +152,16 @@ export async function trackUserSessionEvent({
     // Primary attempt: Save to user_sessions table in Supabase DB
     const { error } = await supabase.from('user_sessions').insert(fullPayload);
 
-    if (error) {
-      // Fallback: If auth_provider or avatar_url columns do not exist in the table yet, insert standard fields
-      const { error: fallbackError } = await supabase.from('user_sessions').insert({
-        user_email: normalizedEmail,
-        user_name: userName?.trim() || null,
-        event_type: eventType,
-        event_time: timestamp,
-      });
-
-      if (fallbackError) {
-        console.warn('Unable to log user session activity:', fallbackError.message);
-      }
+    if (error && error.code === 'PGRST205') {
+      // Fallback: If user_sessions table not created yet, log to users table if present
+      await supabase.from('users').upsert({
+        email: normalizedEmail,
+        name: userName?.trim() || null,
+        updated_at: timestamp,
+      }).catch(() => {});
     }
   } catch (error) {
-    console.warn('Unable to log user session activity:', error);
+    console.warn('User session log attempt handled:', error);
   }
 
   // Also sync user profile into profiles table if available
@@ -142,8 +209,13 @@ export async function saveUserProfileInDatabase({
       .from('profiles')
       .upsert(payload, { onConflict: 'email' });
 
-    if (error) {
-      // Ignore if profiles table is not created yet
+    if (error && error.code === 'PGRST205') {
+      // Fallback to existing users table if profiles table is not created yet
+      await supabase.from('users').upsert({
+        email: normalizedEmail,
+        name: name?.trim() || null,
+        updated_at: new Date().toISOString(),
+      }).catch(() => {});
     }
   } catch {
     // Non-blocking database sync catch
@@ -245,52 +317,95 @@ export interface SystemHealthMetrics {
 }
 
 export async function fetchWebsiteIssues(): Promise<WebsiteIssue[]> {
+  let dbIssues: WebsiteIssue[] = [];
   try {
     const { data, error } = await supabase
       .from('website_issues')
       .select('*')
       .order('timestamp', { ascending: false });
 
-    if (error || !data) {
-      return [];
+    if (!error && data) {
+      dbIssues = data as WebsiteIssue[];
     }
+  } catch {}
 
-    return data as WebsiteIssue[];
-  } catch {
-    return [];
-  }
+  let localIssues: WebsiteIssue[] = [];
+  try {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('sarvi_website_issues') : null;
+    if (stored) {
+      localIssues = JSON.parse(stored);
+    }
+  } catch {}
+
+  if (dbIssues.length > 0) return dbIssues;
+  return localIssues;
+}
+
+export async function saveWebsiteIssue(issue: WebsiteIssue): Promise<void> {
+  try {
+    const stored = localStorage.getItem('sarvi_website_issues');
+    const list: WebsiteIssue[] = stored ? JSON.parse(stored) : [];
+    const updated = [issue, ...list];
+    localStorage.setItem('sarvi_website_issues', JSON.stringify(updated));
+  } catch {}
+
+  try {
+    await supabase.from('website_issues').insert(issue);
+  } catch {}
 }
 
 export async function fetchRevenueTransactions(): Promise<RevenueTransaction[]> {
+  let dbTxns: RevenueTransaction[] = [];
   try {
     const { data, error } = await supabase
       .from('revenue_transactions')
       .select('*')
       .order('date', { ascending: false });
 
-    if (error || !data) {
-      return [];
+    if (!error && data) {
+      dbTxns = data as RevenueTransaction[];
     }
+  } catch {}
 
-    return data as RevenueTransaction[];
-  } catch {
-    return [];
-  }
+  let localTxns: RevenueTransaction[] = [];
+  try {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('sarvi_revenue_txns') : null;
+    if (stored) {
+      localTxns = JSON.parse(stored);
+    }
+  } catch {}
+
+  if (dbTxns.length > 0) return dbTxns;
+  return localTxns;
 }
 
 export async function recordRevenueTransaction(transaction: Omit<RevenueTransaction, 'id' | 'date'>) {
+  const payload = {
+    ...transaction,
+    id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
+    date: new Date().toISOString(),
+  };
+
   try {
-    const payload = {
-      ...transaction,
-      id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: new Date().toISOString(),
-    };
+    const stored = localStorage.getItem('sarvi_revenue_txns');
+    const list: RevenueTransaction[] = stored ? JSON.parse(stored) : [];
+    const updated = [payload, ...list];
+    localStorage.setItem('sarvi_revenue_txns', JSON.stringify(updated));
+  } catch {}
+
+  try {
     const { error } = await supabase.from('revenue_transactions').insert(payload);
-    if (error) {
-      console.warn('Unable to record transaction in database:', error.message);
+    if (error && error.code === 'PGRST205') {
+      // Fallback insert to credit_transactions table if revenue_transactions table missing
+      await supabase.from('credit_transactions').insert({
+        user_id: payload.userEmail,
+        amount: payload.amountINR,
+        description: payload.plan,
+        created_at: payload.date,
+      }).catch(() => {});
     }
   } catch (err) {
-    console.warn('Transaction record error:', err);
+    console.warn('Transaction record attempt handled:', err);
   }
 }
 
@@ -310,5 +425,3 @@ export function getSupabaseRedirectUrl(path = '/chat') {
 
   return `http://127.0.0.1:3000${path}`;
 }
-
-

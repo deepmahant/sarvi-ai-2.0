@@ -10,9 +10,10 @@ import Footer from '../components/Footer';
 interface LandingPageProps {
   onOpenAuth: () => void;
   onOpenAdmin: () => void;
+  onOpenTerms: () => void;
 }
 
-export default function LandingPage({ onOpenAuth, onOpenAdmin }: LandingPageProps) {
+export default function LandingPage({ onOpenAuth, onOpenAdmin, onOpenTerms }: LandingPageProps) {
   return (
     <div className="bg-[#050505] text-white min-h-screen selection:bg-[#00ffff] selection:text-black">
       <Navbar onOpenBrief={onOpenAuth} onOpenAdmin={onOpenAdmin} />
@@ -37,7 +38,8 @@ export default function LandingPage({ onOpenAuth, onOpenAdmin }: LandingPageProp
       <PricingSection onSelectPlan={onOpenAuth} />
       <TeamSection />
       <ContactSection />
-      <Footer />
+      <Footer onOpenTerms={onOpenTerms} />
     </div>
   );
 }
+

@@ -1,7 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || 'https://othgyqwvfaxttqzjtmdb.supabase.co').trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_rGRymMtdj9Rr3REPgfNNrg_zoOBEEGV').trim();
+// Support both Vite (import.meta.env) and Node.js (process.env) environments
+const getEnv = (viteKey: string, nodeKey: string, fallback: string): string => {
+  try {
+    // @ts-ignore - import.meta.env is Vite-specific
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[viteKey]) {
+      return import.meta.env[viteKey].trim();
+    }
+  } catch {}
+  if (typeof process !== 'undefined' && process.env && process.env[nodeKey]) {
+    return process.env[nodeKey]!.trim();
+  }
+  return fallback;
+};
+
+const supabaseUrl = getEnv('VITE_SUPABASE_URL', 'VITE_SUPABASE_URL', 'https://othgyqwvfaxttqzjtmdb.supabase.co');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY', 'sb_publishable_rGRymMtdj9Rr3REPgfNNrg_zoOBEEGV');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -414,7 +428,8 @@ export function getSupabaseRedirectUrl(path = '/chat') {
     return `${window.location.origin}${path}`;
   }
 
-  const configuredRedirect = import.meta.env.VITE_SUPABASE_REDIRECT_URL?.trim();
+  const configuredRedirect = getEnv('VITE_SUPABASE_REDIRECT_URL', 'VITE_SUPABASE_REDIRECT_URL', '');
+  // If no redirect URL configured, skip this block
   if (configuredRedirect && (configuredRedirect.startsWith('http://') || configuredRedirect.startsWith('https://'))) {
     return configuredRedirect;
   }

@@ -6,8 +6,9 @@ const LandingPage = lazy(() => import('./pages/LandingPage'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 const ChatDashboardPage = lazy(() => import('./pages/ChatDashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
 
-type ViewState = 'landing' | 'auth' | 'dashboard' | 'admin';
+type ViewState = 'landing' | 'auth' | 'dashboard' | 'admin' | 'terms';
 
 type AppUser = {
   name: string;
@@ -58,6 +59,9 @@ function getInitialViewState(): { view: ViewState; user: AppUser | null } {
     if (user?.role === 'admin') return { view: 'admin', user };
     if (user) return { view: 'dashboard', user };
     return { view: 'auth', user: null };
+  }
+  if (path === '/terms') {
+    return { view: 'terms', user };
   }
   return { view: 'landing', user };
 }
@@ -285,6 +289,10 @@ export default function App() {
     navigate('landing', '/');
   };
 
+  const handleOpenTerms = () => {
+    navigate('terms', '/terms');
+  };
+
   return (
     <div
       id="app-root-viewport"
@@ -358,7 +366,11 @@ export default function App() {
         }
       >
         {view === 'landing' && (
-          <LandingPage onOpenAuth={handleOpenAuth} onOpenAdmin={handleOpenAdmin} />
+          <LandingPage onOpenAuth={handleOpenAuth} onOpenAdmin={handleOpenAdmin} onOpenTerms={handleOpenTerms} />
+        )}
+
+        {view === 'terms' && (
+          <TermsPage onBackToHome={handleBackToHome} />
         )}
 
         {(view === 'auth' || (view === 'admin' && !currentUser) || (view === 'dashboard' && !currentUser)) && !isAuthInitializing && (

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { checkDatabaseConnection } from '../frontend/src/lib/supabase';
 
 // Load environment variables
 dotenv.config();
@@ -108,6 +109,17 @@ User's message: "${message}"`;
       environment: process.env.NODE_ENV || 'development',
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // New DB health check endpoint using Supabase connection verification
+  app.get('/api/db-health', async (_req, res) => {
+    try {
+      const report = await checkDatabaseConnection();
+      res.json(report);
+    } catch (err) {
+      console.error('DB health check error:', err);
+      res.status(500).json({ error: 'Failed to check DB health' });
+    }
   });
 
   // Handle client-side routing and Vite dev server middlewares
